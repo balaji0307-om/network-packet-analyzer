@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+.Python
+.venv/
+venv/
+env/
+
+# Local packet-capture outputs can contain network metadata.
+*.csv
+*.log
+
+# Local installer used to set up Windows packet capture support.
+npcap-*.exe
