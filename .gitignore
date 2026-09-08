@@ -1,13 +1,51 @@
+# Python
 __pycache__/
 *.py[cod]
-.Python
-.venv/
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+*.whl
+
+# Virtual environments
 venv/
 env/
+.venv/
+.env/
 
-# Local packet-capture outputs can contain network metadata.
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.settings/
+
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Exported captures (don't commit captured data)
 *.csv
+captures/
+exports/
+
+# Byte-compiled / cached
+*.pyc
+*.pyo
+
+# Npcap installer (binary, should not be versioned)
+*.exe
+
+# Logs
 *.log
 
-# Local installer used to set up Windows packet capture support.
-npcap-*.exe
+# pytest / coverage
+.pytest_cache/
+htmlcov/
+.coverage
+coverage.xml
