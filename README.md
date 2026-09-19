@@ -5,7 +5,8 @@
 [![Python Version](https://img.shields.io/badge/Python-3.10%2B-blue.svg?logo=python&logoColor=white)](https://www.python.org/)
 [![Scapy](https://img.shields.io/badge/Packet%20Engine-Scapy%202.5%2B-red.svg?logo=wireshark&logoColor=white)](https://scapy.net/)
 [![Terminal UI](https://img.shields.io/badge/UI-Rich%20Terminal-green.svg)](https://github.com/Textualize/rich)
-[![Tests](https://img.shields.io/badge/Unit%20Tests-17%20Passed-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/Unit%20Tests-22%20Passed-brightgreen.svg)](tests/)
+[![DLP](https://img.shields.io/badge/2FA%20%2F%20DLP-Auto--Masked-purple.svg)]()
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey.svg)]()
 [![Type](https://img.shields.io/badge/Type-100%25%20Passive%20%2F%20Defensive-success.svg)]()
 [![License](https://img.shields.io/badge/License-Educational%20%2F%20MIT-orange.svg)]()
@@ -51,6 +52,7 @@
 - ⚡ **True Streaming Generator Pipeline:** Implements Scapy's asynchronous packet sniffer (`AsyncSniffer`) combined with Python's thread-safe `queue.Queue`. Packets are streamed one-by-one with `store=False`, preventing Scapy from accumulating captures in memory and keeping RAM usage strictly bounded.
 - 🌐 **Multi-Layer Protocol Normalization:** Robust parsing across Layer 2 (Ethernet, ARP), Layer 3 (IPv4, IPv6), and Layer 4 (TCP, UDP, ICMP, ICMPv6).
 - 🛡️ **Safe Payload Inspection & Privacy Mode:** Application-layer data is previewed as synchronized hexadecimal and safe ASCII (non-printable/control bytes replaced with dots). Truncation (`--payload-bytes`) prevents terminal overflow, while `--no-payload` suppresses extraction entirely for privacy.
+- 🔒 **Automated 2FA Secret Key & Credential Masking (DLP):** Built-in Data Loss Prevention automatically detects and redacts Two-Factor Authentication (2FA / TOTP) manual setup secret keys (Base32 16/26/32-character tokens, `otpauth://` URIs), HTTP Authorization Bearer/Basic headers, and credentials from both hexadecimal (`2a 2a ...`) and ASCII (`****`) previews.
 - 🎯 **BPF Filtering:** Native support for Berkeley Packet Filter syntax (`-f "tcp port 443"`, `"udp port 53"`, `"icmp"`), delegated directly to the OS capture driver (Npcap / libpcap).
 - 🎨 **Rich Terminal Dashboard:** Color-coded endpoints, protocol-specific highlights, visual distribution progress bars, and top-talker analytics rendered directly in the console.
 - 💾 **Triple Export Engine:**
@@ -420,13 +422,14 @@ The implementation has been thoroughly verified through automated testing and li
 python -m unittest discover tests
 ```
 ```text
-Ran 17 tests in 0.045s
+Ran 22 tests in 0.067s
 
 OK
 ```
 
 ### Verified Scenarios:
-- [x] **17 Automated Unit Tests Passed:** Full coverage of `parse_packet`, IPv4, IPv6, TCP, UDP, ICMP, ARP, payload truncation, `--no-payload`, `PacketStatistics`, `CsvExporter`, `JsonExporter`, `PcapExporter`, `PacketTable`, and interface resolution.
+- [x] **22 Automated Unit Tests Passed:** Full coverage of `parse_packet`, 2FA manual setup secret key masking, `otpauth://` parameter redaction, Authorization Bearer masking, IPv4, IPv6, TCP, UDP, ICMP, ARP, payload truncation, `--no-payload`, `PacketStatistics`, `CsvExporter`, `JsonExporter`, `PcapExporter`, `PacketTable`, and interface resolution.
+- [x] **2FA & Credential Masking Verified:** Validated that Base32 16/26/32-character TOTP secret keys and HTTP authorization tokens are masked in both hexadecimal (`2a 2a ...`) and ASCII (`****`) previews.
 - [x] **Live Wi-Fi Capture Confirmed:** Successfully captured and parsed live frames on active wireless adapter (`Realtek 8821CE Wireless LAN`).
 - [x] **BPF Filtering Tested:** Verified `tcp`, `udp`, and `icmp` filters isolate matching traffic with zero leakage.
 - [x] **Multi-Export Validated:** Verified incremental output generation across `.csv`, `.json`, and `.pcap`.

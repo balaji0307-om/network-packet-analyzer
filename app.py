@@ -27,7 +27,7 @@ from analyzer.capture import (
     live_capture,
 )
 from analyzer.exporter import CSV_FIELDS
-from analyzer.parser import parse_packet
+from analyzer.parser import parse_packet, sanitize_payload, sanitize_text
 from analyzer.statistics import PacketStatistics
 
 # Page configuration
@@ -94,7 +94,31 @@ mode = st.sidebar.radio(
     index=0,
 )
 
+st.sidebar.markdown("---")
+st.sidebar.subheader("🛡️ Privacy & DLP Security")
+mask_secrets = st.sidebar.checkbox(
+    "Mask 2FA Secrets & Credentials",
+    value=True,
+    help="Automatically detects and masks 2-Factor Authentication (2FA / TOTP) manual setup keys, auth tokens, passwords, and secrets from hex and ASCII views.",
+)
+
 packets_data = []
+
+
+def apply_dlp_masking(records: list[dict]) -> list[dict]:
+    """Sanitize all loaded records to hide 2FA manual secret keys and credentials."""
+    sanitized = []
+    for r in records:
+        rec = dict(r)
+        ascii_val = str(rec.get("payload_ascii", "") or "")
+        if ascii_val and ascii_val != "-":
+            rec["payload_ascii"] = sanitize_text(ascii_val)
+        hex_val = str(rec.get("payload_hex", "") or "")
+        if hex_val and hex_val != "-":
+            rec["payload_hex"] = sanitize_text(hex_val)
+        sanitized.append(rec)
+    return sanitized
+
 
 # --- MODE 1: INSPECT EXISTING FILE ---
 if mode == "Inspect Existing Capture":
@@ -171,6 +195,7 @@ elif mode == "Live Packet Capture":
                     raw_packet,
                     payload_bytes=payload_preview_bytes,
                     no_payload=no_payload,
+                    sanitize_credentials=mask_secrets,
                 )
                 captured_records.append(rec)
                 progress_bar.progress(len(captured_records) / packet_count)
@@ -211,7 +236,12 @@ else:
         ether / IPv6(src="2001:db8::1", dst="2001:db8::2") / ICMPv6EchoRequest() / Raw(b"ICMPv6_Ping_Test"),
         ether / IP(src="192.168.1.105", dst="93.184.216.34") / TCP(sport=58912, dport=80) / Raw(b"GET /index.html HTTP/1.1\r\nHost: example.com\r\n\r\n"),
     ]
-    packets_data = [parse_packet(p, payload_bytes=32) for p in demo_pkts]
+    packets_data = [parse_packet(p, payload_bytes=32, sanitize_credentials=mask_secrets) for p in demo_pkts]
+
+
+# Apply DLP masking if enabled
+if mask_secrets and packets_data:
+    packets_data = apply_dlp_masking(packets_data)
 
 
 # --- RENDER DASHBOARD IF DATA EXISTS ---
@@ -321,6 +351,8 @@ if packets_data:
 
         with p_col2:
             st.markdown("**Hex & ASCII Preview:**")
+            if mask_secrets:
+                st.markdown('<span class="badge" style="background-color: #EDE7F6; color: #4527A0;">🛡️ 2FA Secret Key Redaction Active (DLP)</span>', unsafe_allow_html=True)
             st.code(
                 f"HEX:   {pkt['payload_hex'] or '(no application payload)'}\n\n"
                 f"ASCII: {pkt['payload_ascii'] or '(no application payload)'}",

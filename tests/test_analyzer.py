@@ -18,7 +18,7 @@ from analyzer.capture import (
 )
 from analyzer.display import PacketTable
 from analyzer.exporter import CSV_FIELDS, CsvExporter, JsonExporter, PcapExporter
-from analyzer.parser import _safe_ascii, parse_packet
+from analyzer.parser import _safe_ascii, parse_packet, sanitize_payload, sanitize_text
 from analyzer.statistics import PacketStatistics
 
 
@@ -106,6 +106,50 @@ class TestParser(unittest.TestCase):
         # Only 10 bytes rendered
         hex_bytes = record["payload_hex"].replace(" ...", "").split()
         self.assertEqual(len(hex_bytes), 10)
+
+    def test_2fa_manual_secret_key_masking(self):
+        """Verify 2FA manual secret key (Base32 16/32 char) is automatically redacted in hex and ASCII."""
+        # 16-character Base32 TOTP key
+        packet = IP(src="192.168.1.50", dst="10.0.0.1") / TCP(sport=1234, dport=80) / Raw(load=b"Key: JBSWY3DPEHPK3PXP")
+        record = parse_packet(packet, payload_bytes=32)
+
+        self.assertNotIn("JBSWY3DPEHPK3PXP", record["payload_ascii"])
+        self.assertIn("****************", record["payload_ascii"])
+        # In hex, '*' is 0x2a, verify original hex characters are not exposed
+        self.assertIn("2a 2a 2a", record["payload_hex"])
+
+    def test_otpauth_secret_masking(self):
+        """Verify otpauth:// URI secret query parameters are masked."""
+        raw = b"otpauth://totp/GitHub:user?secret=HXDMVJECJJWSRB3HWIZR4IFUGFTMXBOZ&issuer=GitHub"
+        packet = IP(src="192.168.1.50", dst="10.0.0.1") / TCP(sport=1234, dport=80) / Raw(load=raw)
+        record = parse_packet(packet, payload_bytes=80)
+
+        self.assertNotIn("HXDMVJECJJWSRB3HWIZR4IFUGFTMXBOZ", record["payload_ascii"])
+        self.assertIn("secret=***", record["payload_ascii"])
+
+    def test_auth_header_masking(self):
+        """Verify HTTP Authorization Bearer token is masked."""
+        raw = b"Authorization: Bearer my_secret_token_12345\r\n"
+        packet = IP(src="192.168.1.50", dst="10.0.0.1") / TCP(sport=1234, dport=80) / Raw(load=raw)
+        record = parse_packet(packet, payload_bytes=50)
+
+        self.assertNotIn("my_secret_token_12345", record["payload_ascii"])
+        self.assertIn("Authorization: Bearer ***", record["payload_ascii"])
+
+    def test_disable_secret_masking(self):
+        """Verify sanitize_credentials=False retains raw payload when explicitly disabled."""
+        raw = b"Key: JBSWY3DPEHPK3PXP"
+        packet = IP(src="192.168.1.50", dst="10.0.0.1") / TCP(sport=1234, dport=80) / Raw(load=raw)
+        record = parse_packet(packet, payload_bytes=32, sanitize_credentials=False)
+
+        self.assertIn("JBSWY3DPEHPK3PXP", record["payload_ascii"])
+
+    def test_sanitize_text_utility(self):
+        """Verify standalone string sanitization for dashboard views."""
+        text = "2FA setup manual code: ABCD EFGH IJKL MNOP"
+        sanitized = sanitize_text(text)
+        self.assertNotIn("ABCD EFGH IJKL MNOP", sanitized)
+        self.assertIn("*******************", sanitized)
 
 
 class TestStatistics(unittest.TestCase):

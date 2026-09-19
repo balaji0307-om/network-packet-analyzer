@@ -11,6 +11,7 @@ All parsing is read-only — packets are never modified or retransmitted.
 
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from typing import Any, Optional
 
@@ -32,6 +33,65 @@ _PROTO_MAP = {
     58: "ICMPv6",
 }
 
+# Regex patterns for 2-Factor Authentication (2FA / TOTP) manual secret keys,
+# auth tokens, passwords, and sensitive credentials
+_SENSITIVE_PATTERNS = [
+    # 2FA / TOTP manual setup keys in URLs, parameters, headers, or JSON
+    # e.g., secret=JBSWY3DPEHPK3PXP, totp=..., key=..., token=...
+    re.compile(r'(?i)(secret|totp|otp|key|auth|password|token)\s*([:=])\s*([A-Za-z0-9+/=_~-]{6,64})'),
+    # otpauth:// URI secret parameters
+    re.compile(r'(?i)(otpauth://[^\s"\'<>]*[?&]secret=)([A-Za-z2-7]+)'),
+    # Standalone Base32 2FA manual secret keys (16, 26, or 32 chars of [A-Z2-7] RFC 4648)
+    # including space/hyphen delimited groups (e.g. "JBSW Y3DP EHPK 3PXP")
+    re.compile(r'\b(?:[A-Z2-7]{4}[\s-]?){4,8}\b'),
+    re.compile(r'\b[A-Z2-7]{16,32}\b'),
+    # HTTP Authorization headers (Bearer / Basic)
+    re.compile(r'(?i)(Authorization:\s*(?:Bearer|Basic)\s+)([A-Za-z0-9._~+/-]+=*)'),
+]
+
+
+def sanitize_payload(data: bytes) -> bytes:
+    """Mask sensitive authentication credentials such as 2FA manual secret keys.
+
+    Replaces sensitive 2FA manual setup codes, TOTP secrets, passwords, and tokens
+    with asterisk bytes (0x2a '*'), ensuring credentials are redacted from both
+    hexadecimal (displayed as '2a') and ASCII previews (displayed as '*').
+    """
+    if not data:
+        return data
+
+    text = data.decode("latin1", errors="replace")
+    masked_text = text
+
+    for rx in _SENSITIVE_PATTERNS:
+        for match in rx.finditer(text):
+            if match.lastindex and match.lastindex >= 2:
+                start, end = match.span(match.lastindex)
+            elif match.lastindex and match.lastindex == 1:
+                start, end = match.span(1)
+            else:
+                start, end = match.span(0)
+            masked_text = masked_text[:start] + ("*" * (end - start)) + masked_text[end:]
+
+    return masked_text.encode("latin1", errors="replace")
+
+
+def sanitize_text(text: str) -> str:
+    """Mask 2FA manual secret keys and credentials in a plain string."""
+    if not text:
+        return text
+    masked = text
+    for rx in _SENSITIVE_PATTERNS:
+        for match in rx.finditer(text):
+            if match.lastindex and match.lastindex >= 2:
+                start, end = match.span(match.lastindex)
+            elif match.lastindex and match.lastindex == 1:
+                start, end = match.span(1)
+            else:
+                start, end = match.span(0)
+            masked = masked[:start] + ("*" * (end - start)) + masked[end:]
+    return masked
+
 
 def _safe_ascii(data: bytes) -> str:
     """Convert bytes to a safe ASCII string, replacing non-printable chars with '.'.
@@ -47,6 +107,7 @@ def _build_payload_preview(
     packet: Any,
     payload_bytes: int = 32,
     no_payload: bool = False,
+    sanitize_credentials: bool = True,
 ) -> tuple[str, str]:
     """Extract a truncated hex + ASCII payload preview from a packet.
 
@@ -54,6 +115,7 @@ def _build_payload_preview(
         packet: Raw Scapy packet object.
         payload_bytes: Maximum number of payload bytes to include.
         no_payload: If True, skip payload extraction entirely (privacy mode).
+        sanitize_credentials: If True, mask 2FA secret keys, passwords, and tokens.
 
     Returns:
         A tuple of (hex_string, ascii_string). Both empty if no payload
@@ -65,7 +127,11 @@ def _build_payload_preview(
     if Raw is None or not packet.haslayer(Raw):
         return "", ""
 
-    raw_data = bytes(packet[Raw].load[:payload_bytes])
+    full_payload = bytes(packet[Raw].load)
+    if sanitize_credentials:
+        full_payload = sanitize_payload(full_payload)
+
+    raw_data = full_payload[:payload_bytes]
     hex_str = " ".join(f"{b:02x}" for b in raw_data)
     ascii_str = _safe_ascii(raw_data)
 
@@ -81,6 +147,7 @@ def parse_packet(
     packet: Any,
     payload_bytes: int = 32,
     no_payload: bool = False,
+    sanitize_credentials: bool = True,
 ) -> dict:
     """Parse a raw Scapy packet into a structured summary record.
 
@@ -148,7 +215,10 @@ def parse_packet(
 
     # --- Payload preview ---
     payload_hex, payload_ascii = _build_payload_preview(
-        packet, payload_bytes=payload_bytes, no_payload=no_payload
+        packet,
+        payload_bytes=payload_bytes,
+        no_payload=no_payload,
+        sanitize_credentials=sanitize_credentials,
     )
 
     return {

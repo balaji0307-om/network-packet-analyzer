@@ -117,6 +117,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Disable payload capture entirely (privacy mode)",
     )
+    parser.add_argument(
+        "--no-mask",
+        action="store_true",
+        help="Disable automatic masking of 2FA manual secret keys and credentials (masked by default for DLP)",
+    )
 
     return parser
 
@@ -221,6 +226,7 @@ def main() -> int:
                     raw_packet,
                     payload_bytes=args.payload_bytes,
                     no_payload=args.no_payload,
+                    sanitize_credentials=not args.no_mask,
                 )
 
                 # Feed the record to all pipeline components
